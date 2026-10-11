@@ -28,6 +28,19 @@
     ),
   );
 
+  function syncThemeControls() {
+    document.body.classList.toggle("light", lightMode);
+    document.querySelectorAll(".theme-toggle").forEach((button) => {
+      button.innerHTML = `<span class="toggle-track" aria-hidden="true"><i></i></span> ${lightMode ? "Light Mode" : "Dark Mode"}`;
+      button.setAttribute("aria-pressed", String(lightMode));
+    });
+  }
+
+  function toggleTheme() {
+    lightMode = !lightMode;
+    syncThemeControls();
+  }
+
   async function api(path, options = {}) {
     const response = await fetch(path, {
       cache: "no-store",
@@ -54,29 +67,35 @@
   async function refresh(next = page) {
     state = await api("/api/state");
     document.querySelector(".app").classList.remove("signed-out");
+    document.querySelector(".window").classList.remove("signed-out");
     document.querySelector("#logout-button").hidden = false;
     render(next);
   }
 
   function showLogin(message = "") {
     document.querySelector(".app").classList.add("signed-out");
+    document.querySelector(".window").classList.add("signed-out");
     document.querySelector("#logout-button").hidden = true;
     main.innerHTML = `<section class="login-page">
       <div class="card login-card">
-        <div class="login-mark" aria-hidden="true">▦</div>
-        <h1>Scheduler Pro</h1>
-        <p class="subtle">Sign in to the hosted timetable demo.</p>
+        <h1>SCHEDULER PRO</h1>
+        <p class="subtle">Academic Timetable System</p>
         <form id="login-form">
           <label class="field-label" for="login-username">Username</label>
           <input class="input" id="login-username" name="username" maxlength="120" autocomplete="username" required>
           <label class="field-label" for="login-password">Password</label>
           <input class="input" id="login-password" name="password" type="password" maxlength="256" autocomplete="current-password" required>
-          <button class="btn login-submit" type="submit">Sign in</button>
-          <p class="tiny">Demo password: admin123</p>
+          <button class="btn login-submit" type="submit">LOGIN</button>
+          <button class="theme-toggle login-theme-toggle" id="login-theme-toggle" type="button">
+            <span class="toggle-track" aria-hidden="true"><i></i></span> Dark Mode
+          </button>
+          <p class="tiny credentials-hint">Default: admin / admin123</p>
           <p class="tiny login-status" id="login-status" role="status">${esc(message)}</p>
         </form>
       </div>
     </section>`;
+    syncThemeControls();
+    document.querySelector("#login-theme-toggle").addEventListener("click", toggleTheme);
     document.querySelector("#login-form").addEventListener("submit", async (event) => {
       event.preventDefault();
       const form = event.currentTarget;
@@ -529,13 +548,7 @@
   document.querySelectorAll(".nav").forEach((button) =>
     button.addEventListener("click", () => render(button.dataset.page)),
   );
-  document.querySelector("#theme-toggle").addEventListener("click", () => {
-    lightMode = !lightMode;
-    document.body.classList.toggle("light", lightMode);
-    document.querySelector("#theme-toggle").innerHTML = lightMode
-      ? '<span class="toggle-track"><i></i></span> Light Mode'
-      : '<span class="toggle-track"><i></i></span> Dark Mode';
-  });
+  document.querySelector("#theme-toggle").addEventListener("click", toggleTheme);
 
   document.querySelector("#logout-button").addEventListener("click", async () => {
     try {
