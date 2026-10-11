@@ -11,8 +11,13 @@ the desktop app's database.
 ## Hosted demo
 
 The app is deployed on Render from this repository using `render.yaml`.
-Sign in with username `admin`; the demo password is shared privately by the
-project owner and is intentionally not published in this repository.
+Sign in with:
+
+- **Username:** `admin`
+- **Password:** `admin123`
+
+This password is public by design for the fictional-data demo. Anyone can sign
+in and change the shared sample data; do not enter real school information.
 
 The web process binds to Render's assigned port and `0.0.0.0`. The server
 requires the deployment secrets at startup, uses signed `HttpOnly`,
@@ -42,8 +47,7 @@ Keep the terminal open while using `http://127.0.0.1:8000`.
 The assistant uses an offline helper by default. Cloud AI is opt-in; only set
 `TIMETABLE_ENABLE_CLOUD_AI=1` and the corresponding provider API key as Render
 environment secrets if you want assistant prompts and demo timetable context
-sent to that provider. Never put API keys, passwords, or database files in
-GitHub.
+sent to that provider. Never put AI API keys or database files in GitHub.
 
 WhatsApp and email sending remain disabled in the browser version so a public
 demo cannot accidentally send real or billable messages. Microphone input

@@ -731,8 +731,8 @@ def main() -> None:
         raise SystemExit(f"Browser UI directory not found: {WEB_ROOT}")
     if not ADMIN_USERNAME or len(ADMIN_USERNAME) > 120:
         raise SystemExit("Set TIMETABLE_ADMIN_USERNAME to a non-empty value (max 120 characters).")
-    if not 12 <= len(ADMIN_PASSWORD) <= 256:
-        raise SystemExit("Set TIMETABLE_ADMIN_PASSWORD to 12–256 characters.")
+    if not 8 <= len(ADMIN_PASSWORD) <= 256:
+        raise SystemExit("Set TIMETABLE_ADMIN_PASSWORD to 8–256 characters.")
     if len(SESSION_SECRET) < 32:
         raise SystemExit("Set TIMETABLE_SESSION_SECRET to a random secret of at least 32 characters.")
     initialize_database()
