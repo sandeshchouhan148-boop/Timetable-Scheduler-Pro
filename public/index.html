@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0f0f13">
+  <meta name="description" content="A secure web demo of Timetable Scheduler Pro.">
+  <title>Timetable Scheduler Pro — Web Demo</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <div class="window">
+    <div class="titlebar"><span class="app-icon">▦</span><span>Timetable Scheduler Pro</span><span class="read-only-label">SECURE DEMO · SAMPLE DATA</span><span class="window-actions"><i>−</i><i>□</i><i>×</i></span></div>
+    <div class="app">
+      <aside class="sidebar">
+        <div class="brand"><strong>SCHEDULER PRO</strong><small>Academic Timetable System</small></div>
+        <nav aria-label="App screens">
+          <button class="nav active" data-page="dashboard">Dashboard</button>
+          <button class="nav" data-page="manage">Manage Assets</button>
+          <button class="nav" data-page="generate">Generate Schedule</button>
+          <button class="nav" data-page="history">View History</button>
+          <button class="nav" data-page="analytics">Workload Analytics</button>
+          <button class="nav" data-page="recycle">Recycle Bin</button>
+          <button class="nav" data-page="teachers">Teacher Details</button>
+          <button class="nav" data-page="feedback">Teacher Feedback</button>
+          <button class="nav" data-page="whatsapp">WhatsApp Hub</button>
+          <button class="nav" data-page="settings">User Settings</button>
+        </nav>
+        <div class="sidebar-bottom">
+          <button class="logout-button" id="logout-button" type="button" hidden>Sign out</button>
+          <button class="assistant-nav" data-page="assistant"><span class="assistant-mark" aria-hidden="true">🤖</span> AI Assistant</button>
+          <button class="theme-toggle" id="theme-toggle"><span class="toggle-track"><i></i></span> Dark Mode</button>
+        </div>
+      </aside>
+      <main class="main" id="main"></main>
+    </div>
+  </div>
+</body>
+</html>

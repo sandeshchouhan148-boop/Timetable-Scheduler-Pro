@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: timetable-scheduler-pro
+    runtime: python
+    plan: free
+    buildCommand: python -m compileall -q server.py ai_service.py
+    startCommand: python server.py
+    healthCheckPath: /
+    envVars:
+      - key: TIMETABLE_ADMIN_USERNAME
+        value: admin
+      - key: TIMETABLE_ADMIN_PASSWORD
+        sync: false
+      - key: TIMETABLE_SESSION_SECRET
+        generateValue: true
