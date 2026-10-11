@@ -326,10 +326,36 @@
   }
 
   function whatsapp() {
-    return `${heading("WhatsApp Hub")}<div class="page-content">
-      ${card(`<h2>External messaging is disabled</h2>
-        <p class="notice">WhatsApp and email can send real, billable messages. This local browser interface never loads, stores, or sends credentials.</p>
-        <p class="subtle">Use the desktop app's messaging screen only when you intend to contact real recipients.</p>`, "panel")}
+    return `${heading("WhatsApp Hub")}<div class="page-content messaging-page">
+      ${card(`<h2>Twilio WhatsApp</h2>
+        <p class="notice">Public demo · live messaging is off. Twilio credentials are never collected here, and no real WhatsApp or email will be sent.</p>
+        <p class="subtle">Use the forms below to preview the experience. Connecting a live sender requires a private, secured server setup.</p>`, "panel")}
+      ${card(`<h2>Send WhatsApp Message</h2>
+        <form id="whatsapp-form">
+          <label class="field-label" for="whatsapp-teacher">Recipient Teacher</label>
+          <select class="select" id="whatsapp-teacher" name="teacher">
+            ${state.teachers.map((teacher) => `<option value="${esc(teacher.name)}">${esc(teacher.name)}</option>`).join("")}
+          </select>
+          <label class="field-label" for="whatsapp-phone">Phone</label>
+          <input class="input" id="whatsapp-phone" name="phone" type="tel" maxlength="40" placeholder="+91 98765 43210" required>
+          <label class="field-label" for="whatsapp-message">Message</label>
+          <textarea class="textarea messaging-textarea" id="whatsapp-message" name="message" maxlength="2000" required>Hello! Your timetable has been updated. Please check the Scheduler Pro portal.</textarea>
+          <button class="btn wa-submit" type="submit">Preview WhatsApp</button>
+          <p class="tiny" data-status role="status"></p>
+        </form>
+        <p class="messaging-note">Preview only: no message is sent and no details are saved.</p>`, "panel")}
+      ${card(`<h2>Send Email</h2>
+        <form id="email-preview-form">
+          <label class="field-label" for="email-recipient">Recipient Email</label>
+          <input class="input" id="email-recipient" name="email" type="email" maxlength="254" placeholder="teacher@example.com" required>
+          <label class="field-label" for="email-subject">Subject</label>
+          <input class="input" id="email-subject" name="subject" maxlength="200" value="Timetable update" required>
+          <label class="field-label" for="email-message">Message</label>
+          <textarea class="textarea messaging-textarea" id="email-message" name="message" maxlength="2000" required>Hello! Your timetable has been updated. Please check the Scheduler Pro portal.</textarea>
+          <button class="btn email-submit" type="submit">Preview Email</button>
+          <p class="tiny" data-status role="status"></p>
+        </form>
+        <p class="messaging-note">Preview only: no email is sent and no details are saved.</p>`, "panel")}
     </div>`;
   }
 
@@ -374,6 +400,7 @@
     document.querySelectorAll(".nav").forEach((button) =>
       button.classList.toggle("active", button.dataset.page === page),
     );
+    document.querySelector(".assistant-nav").classList.toggle("active", page === "assistant");
     bindPageEvents();
   }
 
@@ -381,6 +408,20 @@
     main.querySelectorAll("[data-go]").forEach((button) =>
       button.addEventListener("click", () => render(button.dataset.go)),
     );
+    if (page === "whatsapp") {
+      for (const [formId, recipientId, channel] of [
+        ["whatsapp-form", "whatsapp-phone", "WhatsApp"],
+        ["email-preview-form", "email-recipient", "email"],
+      ]) {
+        $(`#${formId}`).addEventListener("submit", (event) => {
+          event.preventDefault();
+          const form = event.currentTarget;
+          const recipient = form.querySelector(`#${recipientId}`).value.trim();
+          form.querySelector("[data-status]").textContent =
+            `${channel} preview ready for ${recipient}. Nothing was sent or saved.`;
+        });
+      }
+    }
     if (page === "manage") {
       main.querySelectorAll("[data-cat]").forEach((button) =>
         button.addEventListener("click", () => {
@@ -545,7 +586,7 @@
     }
   }
 
-  document.querySelectorAll(".nav").forEach((button) =>
+  document.querySelectorAll("[data-page]").forEach((button) =>
     button.addEventListener("click", () => render(button.dataset.page)),
   );
   document.querySelector("#theme-toggle").addEventListener("click", toggleTheme);

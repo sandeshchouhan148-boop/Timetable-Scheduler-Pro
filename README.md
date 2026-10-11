@@ -49,6 +49,8 @@ The assistant uses an offline helper by default. Cloud AI is opt-in; only set
 environment secrets if you want assistant prompts and demo timetable context
 sent to that provider. Never put AI API keys or database files in GitHub.
 
-WhatsApp and email sending remain disabled in the browser version so a public
-demo cannot accidentally send real or billable messages. Microphone input
-depends on browser support and permission.
+WhatsApp and email screens provide local-only previews in the browser version;
+they do not collect credentials, save recipient details, or send real messages.
+Live messaging is intentionally disabled so the public demo cannot accidentally
+contact real recipients or incur charges. Microphone input depends on browser
+support and permission.
