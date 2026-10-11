@@ -51,11 +51,12 @@ key (for example, `GROQ_API_KEY`) as Render environment secrets. Prompts and dem
 timetable context are sent to that provider when enabled. Never put API keys or
 database files in GitHub or the browser.
 
-Speech input uses the browser's speech-recognition service, not a server-side
-microphone package. Open the demo over HTTPS, use a supported browser such as
-Chrome or Edge, allow microphone access in the site's browser settings, and
-choose Hindi or English in the assistant. If speech recognition is blocked or
-unavailable, type the question in the chat instead.
+Choose **हिन्दी में जवाब** or **Answer in English** in the assistant to set both
+the answer language and speech-recognition language. Speech input uses the
+browser's speech-recognition service, not a server-side microphone package.
+Open the demo over HTTPS, use a supported browser such as Chrome or Edge, and
+allow microphone access in the site's browser settings. If speech recognition
+is blocked or unavailable, type the question in the chat instead.
 
 WhatsApp and email screens provide local-only previews in the browser version;
 they do not collect credentials, save recipient details, or send real messages.

@@ -613,6 +613,9 @@ class PreviewHandler(SimpleHTTPRequestHandler):
             prompt = data.get("prompt")
             if not isinstance(prompt, str) or not prompt.strip() or len(prompt) > 2000:
                 raise ValueError("Enter a question (max 2000 characters).")
+            language = data.get("language", "hi")
+            if not isinstance(language, str) or language not in {"hi", "en"}:
+                raise ValueError("Choose Hindi or English for the assistant reply.")
             prompt = prompt.strip()
             state = fetch_state(connection)
             schedule = state["generated_timetable"]
@@ -641,7 +644,10 @@ class PreviewHandler(SimpleHTTPRequestHandler):
                     rows,
                 )
                 answer = (
-                    f"Generated and saved a clash-free timetable for {len(days)} days, "
+                    f"{len(days)} दिनों और रोज़ 8 पीरियड का टकराव-मुक्त टाइमटेबल बनाया और सेव किया। "
+                    "किसी शिक्षक या कमरे का एक ही समय पर दो जगह उपयोग नहीं हुआ।"
+                    if language == "hi"
+                    else f"Generated and saved a clash-free timetable for {len(days)} days, "
                     "8 periods/day. No teacher or classroom is double-booked."
                 )
             else:
@@ -654,6 +660,7 @@ class PreviewHandler(SimpleHTTPRequestHandler):
                         "teacher_expertise": state["teacher_expertise"],
                         "generated_timetable": schedule,
                     },
+                    language=language,
                 )
             connection.executemany(
                 "INSERT INTO ai_history (role, content) VALUES (?, ?)",

@@ -13,6 +13,7 @@
   let state;
   let page = "dashboard";
   let category = "teachers";
+  let replyLanguage = "hi";
   let lightMode = false;
 
   const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({
@@ -386,9 +387,10 @@
       <div class="chat" id="chat">${messages || `<div class="bubble">Ask “list teachers”, “who teaches Mathematics?”, “how many classes?”, or “show Class 9-A timetable Monday”. You can also ask to generate a timetable.</div>`}</div>
       <form class="chat-inputs" id="assistant-form">
         <input class="input" id="assistant-input" name="prompt" maxlength="2000" placeholder="Ask about teachers, classes, or timetable…" autocomplete="off" required aria-label="Ask the timetable assistant">
-        <select class="select mic-language" id="mic-language" aria-label="Speech input language">
-          <option value="hi-IN">हिन्दी</option>
-          <option value="en-IN">English</option>
+        <label class="assistant-language-label" for="assistant-language">Reply language / जवाब की भाषा</label>
+        <select class="select assistant-language" id="assistant-language" aria-label="Reply language">
+          <option value="hi" ${replyLanguage === "hi" ? "selected" : ""}>हिन्दी में जवाब</option>
+          <option value="en" ${replyLanguage === "en" ? "selected" : ""}>Answer in English</option>
         </select>
         <button class="btn" type="button" id="mic-button" ${speechSupported ? "" : "disabled"} aria-label="Start speech input">🎤 Mic</button>
         <button class="btn" type="submit">Send</button>
@@ -539,6 +541,7 @@
         const form = event.currentTarget;
         const prompt = $("#assistant-input").value.trim();
         if (!prompt) return;
+        const language = $("#assistant-language").value;
         const chat = $("#chat");
         const userBubble = document.createElement("div");
         userBubble.className = "bubble user";
@@ -549,7 +552,7 @@
         send.disabled = true;
         try {
           const result = await api("/api/assistant", {
-            method: "POST", body: JSON.stringify({ prompt }),
+            method: "POST", body: JSON.stringify({ prompt, language }),
           });
           await refresh("assistant");
           $("#assistant-status").textContent = result.ai_configured
@@ -566,6 +569,9 @@
         }
       });
       const micButton = $("#mic-button");
+      $("#assistant-language").addEventListener("change", (event) => {
+        replyLanguage = event.currentTarget.value;
+      });
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (SpeechRecognition) {
         const capability = $("#microphone-capability");
@@ -601,7 +607,7 @@
         void updatePermissionStatus();
         micButton.addEventListener("click", () => {
           const recognition = new SpeechRecognition();
-          recognition.lang = $("#mic-language").value;
+          recognition.lang = replyLanguage === "hi" ? "hi-IN" : "en-IN";
           recognition.interimResults = false;
           recognition.maxAlternatives = 1;
           micButton.disabled = true;

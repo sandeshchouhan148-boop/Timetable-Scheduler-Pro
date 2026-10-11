@@ -65,7 +65,8 @@ class AIService:
     def configured(self) -> bool:
         return bool(self.api_key and self.model and self.url)
 
-    def _offline_answer(self, prompt: str, context: dict) -> str:
+    def _offline_answer(self, prompt: str, context: dict, language: str = "hi") -> str:
+        in_hindi = language == "hi"
         query = prompt.casefold()
         teachers = context.get("teachers", [])
         subjects = context.get("subjects", [])
@@ -78,31 +79,40 @@ class AIService:
         )
         if greeting:
             return (
-                "Namaste! I can help with this demo's teachers, subjects, classes, "
+                "नमस्ते! मैं इस डेमो के शिक्षक, विषय, कक्षाएँ और टाइमटेबल बता सकता हूँ। "
+                "पूछें: “Mathematics कौन पढ़ाता है?” या “Class 9-A का Monday टाइमटेबल दिखाएँ।”"
+                if in_hindi
+                else "Hello! I can help with this demo's teachers, subjects, classes, "
                 "and timetable. Try “who teaches Mathematics?” or “show Class 9-A "
                 "timetable on Monday”."
             )
 
         list_intent = any(
             word in query
-            for word in ("list", "show all", "show me", "kitne", "kitni", "कितने", "कितनी")
+            for word in (
+                "list", "show all", "show me", "kitne", "kitni", "कितने", "कितनी",
+                "सूची", "दिखाओ", "बताओ", "सभी",
+            )
         )
         teacher_query = any(
             word in query
             for word in (
                 "teacher", "teachers", "teach", "who", "kaun",
-                "adhyapak", "padhata", "padhati", "padhate", "शिक्षक", "पढ़ाते",
+                "adhyapak", "padhata", "padhati", "padhate", "शिक्षक", "शिक्षकों", "पढ़ाते",
             )
         )
         subject_query = any(word in query for word in ("subject", "subjects", "vishay", "विषय"))
-        class_query = any(word in query for word in ("class", "classes", "kaksha", "कक्षा"))
+        class_query = any(word in query for word in ("class", "classes", "kaksha", "कक्षा", "कक्षाएँ", "कक्षाएं"))
 
         if teacher_query and list_intent:
-            return "Teachers: " + (", ".join(teachers) if teachers else "none added yet.")
+            names = ", ".join(teachers) if teachers else ("अभी कोई नहीं जोड़ा गया" if in_hindi else "none added yet")
+            return ("शिक्षक: " if in_hindi else "Teachers: ") + names
         if subject_query and list_intent:
-            return "Subjects: " + (", ".join(subjects) if subjects else "none added yet.")
+            names = ", ".join(subjects) if subjects else ("अभी कोई नहीं जोड़ा गया" if in_hindi else "none added yet")
+            return ("विषय: " if in_hindi else "Subjects: ") + names
         if class_query and list_intent:
-            return "Classes: " + (", ".join(classes) if classes else "none added yet.")
+            names = ", ".join(classes) if classes else ("अभी कोई नहीं जोड़ा गया" if in_hindi else "none added yet")
+            return ("कक्षाएँ: " if in_hindi else "Classes: ") + names
         matching_subjects = [
             subject for subject in subjects if subject.casefold() in query
         ]
@@ -112,17 +122,28 @@ class AIService:
                 name for name, assigned in expertise.items() if matched in assigned
             ]
             return (
-                f"{matched} is taught by {', '.join(names)}."
+                (
+                    f"{matched} विषय पढ़ाने वाले शिक्षक हैं: {', '.join(names)}।"
+                    if in_hindi
+                    else f"{matched} is taught by {', '.join(names)}."
+                )
                 if names
-                else f"No teacher is currently linked to {matched}."
+                else (
+                    f"{matched} विषय से अभी कोई शिक्षक जुड़ा नहीं है।"
+                    if in_hindi
+                    else f"No teacher is currently linked to {matched}."
+                )
             )
-        if any(word in query for word in ("how many", "count", "total", "कितने", "कितनी")):
+        if any(word in query for word in ("how many", "count", "total", "कितने", "कितनी", "कितना")):
             if teacher_query:
-                return f"There are {len(teachers)} teachers."
+                count = len(teachers)
+                return f"शिक्षकों की संख्या {count} है।" if in_hindi else f"There {'is' if count == 1 else 'are'} {count} teacher{'s' if count != 1 else ''}."
             if subject_query:
-                return f"There are {len(subjects)} subjects."
+                count = len(subjects)
+                return f"विषयों की संख्या {count} है।" if in_hindi else f"There {'is' if count == 1 else 'are'} {count} subject{'s' if count != 1 else ''}."
             if class_query:
-                return f"There are {len(classes)} classes."
+                count = len(classes)
+                return f"कक्षाओं की संख्या {count} है।" if in_hindi else f"There {'is' if count == 1 else 'are'} {count} class{'es' if count != 1 else ''}."
 
         requested_class = next(
             (
@@ -169,22 +190,42 @@ class AIService:
                             f"({entry.get('room', '')})"
                         )
             if entries:
+                if in_hindi:
+                    return "टाइमटेबल:\n" + "\n".join(
+                        f"{day}, कक्षा {class_name}, पीरियड {period}: "
+                        f"{entry.get('subject', '')} — शिक्षक {entry.get('teacher', '')} "
+                        f"(कमरा {entry.get('room', '')})"
+                        for day, day_data in timetable.items()
+                        if not requested_day or day.casefold() == requested_day.casefold()
+                        for class_name, periods in day_data.items()
+                        if not requested_class or class_name.casefold() == requested_class.casefold()
+                        for period, entry in periods.items()
+                        if not requested_teacher or entry.get("teacher", "").casefold() == requested_teacher.casefold()
+                    )
                 return "Offline timetable results:\n" + "\n".join(entries[:50])
             return (
-                "No matching timetable entries found for that filter. Generate a "
+                "इस जानकारी से मेल खाता टाइमटेबल नहीं मिला। टाइमटेबल बनाएँ या कक्षा, "
+                "शिक्षक और दिन का नाम जाँचें।"
+                if in_hindi
+                else "No matching timetable entries found for that filter. Generate a "
                 "timetable or check the class, teacher, and day names."
             )
         return (
-            "Offline timetable helper: ask to list teachers, subjects, classes, "
-            "or a class/teacher schedule. To generate a schedule, ask 'generate "
-            "timetable' and provide the days/periods in the Generate Schedule screen."
+            "मैं शिक्षक, विषय, कक्षा और टाइमटेबल की जानकारी दे सकता हूँ। पूछें: "
+            "“शिक्षकों की सूची”, “कितनी कक्षाएँ हैं?” या “Class 9-A का Monday टाइमटेबल दिखाएँ।”"
+            if in_hindi
+            else "I can answer questions about teachers, subjects, classes, and "
+            "timetables. Try “list teachers”, “how many classes?”, or “show "
+            "Class 9-A timetable Monday”."
         )
 
-    def ask(self, prompt: str, context: dict) -> str:
+    def ask(self, prompt: str, context: dict, language: str = "hi") -> str:
         prompt = prompt.strip()
         if not prompt:
             return "AI Error: prompt is empty."
-        offline = self._offline_answer(prompt, context)
+        if language not in {"hi", "en"}:
+            raise ValueError("language must be 'hi' or 'en'")
+        offline = self._offline_answer(prompt, context, language)
         if not self.configured:
             if self.provider == "offline":
                 return offline
@@ -196,9 +237,11 @@ class AIService:
                 error = f"AI Error: {self.provider} model or endpoint is not configured."
             return error + "\n\n" + offline
 
+        response_language = "Hindi" if language == "hi" else "English"
         system = (
-            "You are Scheduler Pro AI. Respond in the user's language "
-            "(Hindi/English/Hinglish)."
+            "You are Scheduler Pro AI. Respond only in "
+            f"{response_language}, regardless of the language used in the question. "
+            "Preserve names and subject titles as written."
         )
         if context:
             system += " Data: " + json.dumps(context, ensure_ascii=False, default=str)
