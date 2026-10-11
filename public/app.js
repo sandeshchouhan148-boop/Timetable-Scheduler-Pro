@@ -768,6 +768,7 @@
     }
   });
 
+  syncThemeControls();
   api("/api/session").then(() => refresh()).catch((error) => {
     if (error.status === 401) {
       showLogin();
