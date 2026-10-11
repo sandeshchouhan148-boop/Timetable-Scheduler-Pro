@@ -72,6 +72,7 @@
           <label class="field-label" for="login-password">Password</label>
           <input class="input" id="login-password" name="password" type="password" maxlength="256" autocomplete="current-password" required>
           <button class="btn login-submit" type="submit">Sign in</button>
+          <p class="tiny">Demo password: admin123</p>
           <p class="tiny login-status" id="login-status" role="status">${esc(message)}</p>
         </form>
       </div>
