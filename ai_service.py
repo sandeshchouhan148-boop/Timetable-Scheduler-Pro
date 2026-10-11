@@ -125,6 +125,8 @@ class AIService:
             return "AI Error: prompt is empty."
         offline = self._offline_answer(prompt, context)
         if not self.configured:
+            if self.provider == "offline":
+                return offline
             if self.provider not in {"groq", "nvidia", "xai", "openai-compatible"}:
                 error = f"AI Error: unsupported AI_PROVIDER '{self.provider}'."
             elif not self.api_key:

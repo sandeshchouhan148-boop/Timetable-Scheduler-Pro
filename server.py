@@ -43,7 +43,7 @@ AI_ENABLED = os.environ.get("TIMETABLE_ENABLE_CLOUD_AI", "").strip().casefold() 
     "true",
     "yes",
 }
-AI = AIService.from_env() if AI_ENABLED else AIService.from_env({})
+AI = AIService.from_env() if AI_ENABLED else AIService.from_env({"AI_PROVIDER": "offline"})
 
 
 def open_database() -> sqlite3.Connection:
