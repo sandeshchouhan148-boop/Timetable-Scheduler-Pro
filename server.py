@@ -81,6 +81,7 @@ AI_ENABLED = os.environ.get("TIMETABLE_ENABLE_CLOUD_AI", "").strip().casefold() 
     "yes",
 }
 AI = AIService.from_env() if AI_ENABLED else AIService.from_env({"AI_PROVIDER": "offline"})
+EXPANDED_DEMO_DATA_KEY = "expanded_demo_data_v1"
 
 
 def open_database() -> sqlite3.Connection:
@@ -157,6 +158,10 @@ def initialize_database() -> None:
                 content TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
+            CREATE TABLE IF NOT EXISTS app_metadata (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            );
             """
         )
         if connection.execute("SELECT COUNT(*) FROM teachers").fetchone()[0] == 0:
@@ -216,6 +221,56 @@ def initialize_database() -> None:
                 "(class_name, day, period, subject, teacher, room) "
                 "VALUES (?, ?, ?, ?, ?, ?)",
                 rows,
+            )
+        if not connection.execute(
+            "SELECT 1 FROM app_metadata WHERE key = ?",
+            (EXPANDED_DEMO_DATA_KEY,),
+        ).fetchone():
+            connection.executemany(
+                "INSERT OR IGNORE INTO teachers (name, email, phone) VALUES (?, ?, ?)",
+                [
+                    ("Kavita Rao", "kavita@example.invalid", ""),
+                    ("Arjun Mehta", "arjun@example.invalid", ""),
+                    ("Nisha Kapoor", "nisha@example.invalid", ""),
+                ],
+            )
+            connection.executemany(
+                "INSERT OR IGNORE INTO subjects (name) VALUES (?)",
+                [
+                    ("Computer Science",),
+                    ("Hindi",),
+                    ("Social Studies",),
+                ],
+            )
+            connection.executemany(
+                "INSERT OR IGNORE INTO classes (name) VALUES (?)",
+                [("Class 8-A",), ("Class 10-A",)],
+            )
+            connection.executemany(
+                "INSERT OR IGNORE INTO classrooms (name) VALUES (?)",
+                [("Room 103",), ("Room 104",)],
+            )
+            connection.executemany(
+                "INSERT OR IGNORE INTO lab_rooms (name) VALUES (?)",
+                [("Computer Lab",), ("Science Lab",)],
+            )
+            connection.executemany(
+                "INSERT OR IGNORE INTO teacher_expertise (teacher, subject) VALUES (?, ?)",
+                [
+                    ("Kavita Rao", "Mathematics"),
+                    ("Kavita Rao", "Computer Science"),
+                    ("Kavita Rao", "Hindi"),
+                    ("Arjun Mehta", "Science"),
+                    ("Arjun Mehta", "Social Studies"),
+                    ("Arjun Mehta", "Computer Science"),
+                    ("Nisha Kapoor", "English"),
+                    ("Nisha Kapoor", "Hindi"),
+                    ("Nisha Kapoor", "Social Studies"),
+                ],
+            )
+            connection.execute(
+                "INSERT INTO app_metadata (key, value) VALUES (?, ?)",
+                (EXPANDED_DEMO_DATA_KEY, "1"),
             )
         connection.commit()
 
@@ -1103,6 +1158,8 @@ class PreviewHandler(SimpleHTTPRequestHandler):
                         "teachers": [teacher["name"] for teacher in state["teachers"]],
                         "subjects": state["subjects"],
                         "classes": state["classes"],
+                        "classrooms": state["classrooms"],
+                        "labs": state["labs"],
                         "teacher_expertise": state["teacher_expertise"],
                         "generated_timetable": schedule,
                     },

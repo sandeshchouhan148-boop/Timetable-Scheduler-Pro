@@ -25,6 +25,12 @@ requires the deployment secrets at startup, uses signed `HttpOnly`,
 and limits failed sign-in attempts. The demo is one shared account and one
 shared dataset: only use fictional data.
 
+The fictional starter assets include six teachers, six subjects, four classes,
+four classrooms, and two labs. Newly added starter assets are migrated once
+without re-adding them after a user moves one to the Recycle Bin. The starter
+timetable initially contains entries for the original demo classes; generate
+a new timetable to populate the expanded classes.
+
 ### Free-service data limits
 
 The included Render service uses its free plan and a local SQLite database.
@@ -44,12 +50,15 @@ Keep the terminal open while using `http://127.0.0.1:8000`.
 
 ## AI and privacy
 
-The assistant uses an offline timetable Q&A helper by default; it can answer
-about teachers, subjects, classes, teacher expertise, and saved schedules. Full
-open-ended AI is opt-in: set `TIMETABLE_ENABLE_CLOUD_AI=1` and the provider API
-key (for example, `GROQ_API_KEY`) as Render environment secrets. Prompts and demo
-timetable context are sent to that provider when enabled. Never put API keys or
-database files in GitHub or the browser.
+The assistant uses an offline timetable Q&A helper by default; it can list and
+count assets, look up teacher expertise, filter the saved timetable by class,
+teacher, day, period, or room, and report teacher workload. Offline answers are
+computed from the current demo database; this is not model training and chat
+messages do not train or change an AI model. Full open-ended AI is opt-in: set
+`TIMETABLE_ENABLE_CLOUD_AI=1` and the provider API key (for example,
+`GROQ_API_KEY`) as Render environment secrets. Prompts and demo timetable
+context are sent to that provider when enabled. Never put API keys or database
+files in GitHub or the browser.
 
 Choose **हिन्दी में जवाब** or **Answer in English** in the assistant to set both
 the answer language and speech-recognition language. Speech input uses the

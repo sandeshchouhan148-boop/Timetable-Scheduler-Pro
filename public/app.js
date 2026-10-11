@@ -263,7 +263,8 @@
       <div class="subtabs">${assetTypes.map(([key, label]) => `<button class="tab ${key === category ? "active" : ""}" data-cat="${key}">${label}</button>`).join("")}</div>
       <div class="split">
         ${card(`<h2>Add ${esc(selectedType[1])}</h2>
-          <form id="asset-form"><input class="input" name="name" maxlength="120" required placeholder="Enter name..." aria-label="New ${esc(selectedType[1])} name">
+          <form id="asset-form"><input type="hidden" name="category" value="${esc(category)}">
+          <input class="input" name="name" maxlength="120" required placeholder="Enter name..." aria-label="New ${esc(selectedType[1])} name">
           <button class="btn green" type="submit">Add Item</button><p class="tiny" data-status role="status"></p></form>
           <label class="field-label" for="asset-search">Search</label>
           <input class="input" id="asset-search" placeholder="Search this list..." aria-label="Search assets">
@@ -476,7 +477,7 @@
       <div class="ai-cloud-notice">${state.ai_configured
         ? "Cloud AI is enabled. Prompts and demo timetable context are sent to the configured provider."
         : "Offline timetable Q&A is available. For full AI chat, the admin must set TIMETABLE_ENABLE_CLOUD_AI and a provider API key in Render. Never paste keys in this chat."}</div>
-      <div class="chat" id="chat">${messages || `<div class="bubble">Ask “list teachers”, “who teaches Mathematics?”, “how many classes?”, or “show Class 9-A timetable Monday”. You can also ask to generate a timetable.</div>`}</div>
+      <div class="chat" id="chat">${messages || `<div class="bubble">Ask “list teachers”, “who teaches Mathematics?”, “what subjects does Kavita Rao teach?”, “teacher workload”, “which classes use Room 101?”, or “show Class 9-A timetable Monday”. You can also ask to generate a timetable.</div>`}</div>
       <form class="chat-inputs" id="assistant-form">
         <input class="input" id="assistant-input" name="prompt" maxlength="2000" placeholder="Ask about teachers, classes, or timetable…" autocomplete="off" required aria-label="Ask the timetable assistant">
         <label class="assistant-language-label" for="assistant-language">Reply language / जवाब की भाषा</label>
