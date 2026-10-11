@@ -1,5 +1,7 @@
 # Timetable Scheduler Pro — hosted web demo
 
+**Live demo:** <https://timetable-scheduler-pro.onrender.com>
+
 A browser version of the Timetable Scheduler Pro desktop app. It includes the
 dashboard, asset management, teacher expertise, timetable generation and
 history, workload analytics, feedback, backup, and assistant. The demo uses
