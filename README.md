@@ -44,10 +44,18 @@ Keep the terminal open while using `http://127.0.0.1:8000`.
 
 ## AI and privacy
 
-The assistant uses an offline helper by default. Cloud AI is opt-in; only set
-`TIMETABLE_ENABLE_CLOUD_AI=1` and the corresponding provider API key as Render
-environment secrets if you want assistant prompts and demo timetable context
-sent to that provider. Never put AI API keys or database files in GitHub.
+The assistant uses an offline timetable Q&A helper by default; it can answer
+about teachers, subjects, classes, teacher expertise, and saved schedules. Full
+open-ended AI is opt-in: set `TIMETABLE_ENABLE_CLOUD_AI=1` and the provider API
+key (for example, `GROQ_API_KEY`) as Render environment secrets. Prompts and demo
+timetable context are sent to that provider when enabled. Never put API keys or
+database files in GitHub or the browser.
+
+Speech input uses the browser's speech-recognition service, not a server-side
+microphone package. Open the demo over HTTPS, use a supported browser such as
+Chrome or Edge, allow microphone access in the site's browser settings, and
+choose Hindi or English in the assistant. If speech recognition is blocked or
+unavailable, type the question in the chat instead.
 
 WhatsApp and email screens provide local-only previews in the browser version;
 they do not collect credentials, save recipient details, or send real messages.

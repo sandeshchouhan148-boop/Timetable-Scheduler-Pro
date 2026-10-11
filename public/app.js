@@ -377,13 +377,20 @@
     const speechSupported = Boolean(window.SpeechRecognition || window.webkitSpeechRecognition);
     const status = state.ai_configured
       ? `Configured provider · ${esc(state.ai_provider)} · key stays on server`
-      : "Offline timetable helper";
+      : "Offline helper · timetable questions";
     return `<div class="ai-window"><h1 class="ai-title"><span class="assistant-mark" aria-hidden="true">🤖</span> AI Assistant</h1>
-      <div class="ai-status"><span>Microphone · ${speechSupported ? "browser support detected" : "not supported by this browser"}</span><span>${status}</span></div>
-      <div class="chat" id="chat">${messages || `<div class="bubble">Ask about teachers, subjects, classes, or a schedule. Try “list teachers” or “show 9-A timetable Monday”. You can also ask to generate a timetable.</div>`}</div>
+      <div class="ai-status"><span id="microphone-capability">Microphone · ${speechSupported ? "checking permission…" : "speech recognition not supported by this browser"}</span><span>${status}</span></div>
+      <div class="ai-cloud-notice">${state.ai_configured
+        ? "Cloud AI is enabled. Prompts and demo timetable context are sent to the configured provider."
+        : "Offline timetable Q&A is available. For full AI chat, the admin must set TIMETABLE_ENABLE_CLOUD_AI and a provider API key in Render. Never paste keys in this chat."}</div>
+      <div class="chat" id="chat">${messages || `<div class="bubble">Ask “list teachers”, “who teaches Mathematics?”, “how many classes?”, or “show Class 9-A timetable Monday”. You can also ask to generate a timetable.</div>`}</div>
       <form class="chat-inputs" id="assistant-form">
         <input class="input" id="assistant-input" name="prompt" maxlength="2000" placeholder="Ask about teachers, classes, or timetable…" autocomplete="off" required aria-label="Ask the timetable assistant">
-        <button class="btn" type="button" id="mic-button" ${speechSupported ? "" : "disabled"} aria-label="Start speech input">🎤</button>
+        <select class="select mic-language" id="mic-language" aria-label="Speech input language">
+          <option value="hi-IN">हिन्दी</option>
+          <option value="en-IN">English</option>
+        </select>
+        <button class="btn" type="button" id="mic-button" ${speechSupported ? "" : "disabled"} aria-label="Start speech input">🎤 Mic</button>
         <button class="btn" type="submit">Send</button>
       </form><p class="tiny" id="assistant-status" role="status"></p>
     </div>`;
@@ -561,26 +568,76 @@
       const micButton = $("#mic-button");
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (SpeechRecognition) {
+        const capability = $("#microphone-capability");
+        const status = $("#assistant-status");
+        const updatePermissionStatus = async () => {
+          if (!window.isSecureContext) {
+            capability.textContent = "Microphone unavailable · open this app over HTTPS.";
+            micButton.disabled = true;
+            return;
+          }
+          if (!navigator.permissions?.query) {
+            capability.textContent = "Microphone · allow access when your browser asks.";
+            return;
+          }
+          try {
+            const permission = await navigator.permissions.query({ name: "microphone" });
+            if (!micButton.isConnected) return;
+            if (permission.state === "denied") {
+              capability.textContent = "Microphone blocked · allow it in browser site settings, then reload.";
+              status.textContent = "Click the lock/site icon beside the address and set Microphone to Allow.";
+              micButton.disabled = true;
+              return;
+            }
+            capability.textContent = permission.state === "granted"
+              ? "Microphone · permission allowed."
+              : "Microphone · click Mic and allow browser access.";
+            micButton.disabled = false;
+            permission.addEventListener("change", updatePermissionStatus, { once: true });
+          } catch {
+            capability.textContent = "Microphone · click Mic and allow browser access.";
+          }
+        };
+        void updatePermissionStatus();
         micButton.addEventListener("click", () => {
           const recognition = new SpeechRecognition();
-          recognition.lang = navigator.language || "en-US";
+          recognition.lang = $("#mic-language").value;
           recognition.interimResults = false;
           recognition.maxAlternatives = 1;
-          $("#assistant-status").textContent = "Listening… allow microphone access if asked.";
+          micButton.disabled = true;
+          status.textContent = "Starting microphone…";
+          recognition.onstart = () => {
+            status.textContent = "Listening… speak now.";
+          };
           recognition.onresult = (event) => {
             $("#assistant-input").value = event.results[0][0].transcript;
             $("#assistant-input").focus();
-            $("#assistant-status").textContent = "Speech recognized. Review it, then press Send.";
+            status.textContent = "Speech recognized. Review it, then press Send.";
           };
           recognition.onerror = (event) => {
-            $("#assistant-status").textContent = `Microphone input failed: ${event.error}.`;
+            const messages = {
+              "not-allowed": "Microphone blocked. Allow access in browser site settings, then reload.",
+              "service-not-allowed": "Browser speech service is blocked. Check browser privacy/network settings.",
+              "audio-capture": "No microphone was found. Connect or enable a microphone and try again.",
+              network: "Speech recognition service is unreachable. Check your internet and try again.",
+              "no-speech": "No speech was detected. Check the microphone and try again.",
+              aborted: "Microphone listening was stopped.",
+            };
+            capability.textContent = "Microphone · recognition stopped.";
+            status.textContent = messages[event.error] || `Microphone input failed: ${event.error}. You can type your question instead.`;
           };
           recognition.onend = () => {
-            if ($("#assistant-status").textContent === "Listening… allow microphone access if asked.") {
-              $("#assistant-status").textContent = "No speech was recognized.";
+            micButton.disabled = false;
+            if (status.textContent === "Listening… speak now.") {
+              status.textContent = "No speech was recognized. Check the microphone and try again.";
             }
           };
-          recognition.start();
+          try {
+            recognition.start();
+          } catch (error) {
+            micButton.disabled = false;
+            status.textContent = `Could not start microphone: ${error.message}. You can type your question instead.`;
+          }
         });
       }
     }

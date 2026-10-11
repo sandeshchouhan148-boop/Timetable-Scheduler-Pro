@@ -71,27 +71,88 @@ class AIService:
         subjects = context.get("subjects", [])
         classes = context.get("classes", [])
         timetable = context.get("generated_timetable", {})
+        expertise = context.get("teacher_expertise", {})
+        greeting = any(
+            word in query.split()
+            for word in ("hi", "hello", "hey", "namaste", "नमस्ते", "हाय")
+        )
+        if greeting:
+            return (
+                "Namaste! I can help with this demo's teachers, subjects, classes, "
+                "and timetable. Try “who teaches Mathematics?” or “show Class 9-A "
+                "timetable on Monday”."
+            )
 
-        if any(word in query for word in ("teacher", "teachers", "adhyapak", "शिक्षक")):
+        list_intent = any(
+            word in query
+            for word in ("list", "show all", "show me", "kitne", "kitni", "कितने", "कितनी")
+        )
+        teacher_query = any(
+            word in query
+            for word in (
+                "teacher", "teachers", "teach", "who", "kaun",
+                "adhyapak", "padhata", "padhati", "padhate", "शिक्षक", "पढ़ाते",
+            )
+        )
+        subject_query = any(word in query for word in ("subject", "subjects", "vishay", "विषय"))
+        class_query = any(word in query for word in ("class", "classes", "kaksha", "कक्षा"))
+
+        if teacher_query and list_intent:
             return "Teachers: " + (", ".join(teachers) if teachers else "none added yet.")
-        if any(word in query for word in ("subject", "subjects", "vishay", "विषय")):
+        if subject_query and list_intent:
             return "Subjects: " + (", ".join(subjects) if subjects else "none added yet.")
-        if any(word in query for word in ("class", "classes", "kaksha", "कक्षा")):
+        if class_query and list_intent:
             return "Classes: " + (", ".join(classes) if classes else "none added yet.")
+        matching_subjects = [
+            subject for subject in subjects if subject.casefold() in query
+        ]
+        if teacher_query and matching_subjects:
+            matched = matching_subjects[0]
+            names = [
+                name for name, assigned in expertise.items() if matched in assigned
+            ]
+            return (
+                f"{matched} is taught by {', '.join(names)}."
+                if names
+                else f"No teacher is currently linked to {matched}."
+            )
+        if any(word in query for word in ("how many", "count", "total", "कितने", "कितनी")):
+            if teacher_query:
+                return f"There are {len(teachers)} teachers."
+            if subject_query:
+                return f"There are {len(subjects)} subjects."
+            if class_query:
+                return f"There are {len(classes)} classes."
 
         requested_class = next(
-            (name for name in classes if name.casefold() in query), None
+            (
+                name
+                for name in classes
+                if name.casefold() in query
+                or name.casefold().removeprefix("class ").strip() in query
+            ),
+            None,
         )
         requested_teacher = next(
             (name for name in teachers if name.casefold() in query), None
         )
+        requested_day = next(
+            (
+                day
+                for day in timetable
+                if day.casefold() in query
+            ),
+            None,
+        )
         schedule_query = any(
             word in query
-            for word in ("schedule", "timetable", "routine", "time table", "samay", "period")
+            for word in ("schedule", "timetable", "routine", "time table", "samay", "period", "show")
         )
         if schedule_query or requested_class or requested_teacher:
             entries = []
             for day, day_data in timetable.items():
+                if requested_day and day.casefold() != requested_day.casefold():
+                    continue
                 for class_name, periods in day_data.items():
                     if requested_class and class_name.casefold() != requested_class.casefold():
                         continue
@@ -110,8 +171,8 @@ class AIService:
             if entries:
                 return "Offline timetable results:\n" + "\n".join(entries[:50])
             return (
-                "No matching timetable entries found. Generate a timetable or try "
-                "a class/teacher name."
+                "No matching timetable entries found for that filter. Generate a "
+                "timetable or check the class, teacher, and day names."
             )
         return (
             "Offline timetable helper: ask to list teachers, subjects, classes, "
