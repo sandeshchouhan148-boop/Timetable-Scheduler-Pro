@@ -82,6 +82,7 @@ h1{font-size:25px;line-height:1.25;margin:0;font-weight:700;letter-spacing:-.4px
 [data-status]{min-height:14px;overflow-wrap:anywhere}
 .notice{color:var(--warning);font-size:11px;line-height:1.6}
 .row-card{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 12px;margin:5px 0;border-radius:9px;background:var(--inner)}
+.row-card[hidden]{display:none}
 .row-card strong{font-size:12px}
 .row-card small{color:var(--pale);display:block;margin-top:3px;font-size:10px}
 .subtle{color:var(--pale);font-size:12px}
