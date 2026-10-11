@@ -58,6 +58,12 @@ Open the demo over HTTPS, use a supported browser such as Chrome or Edge, and
 allow microphone access in the site's browser settings. If speech recognition
 is blocked or unavailable, type the question in the chat instead.
 
+User Settings can save the assistant language, theme, and default timetable
+days and periods in the current browser. These preferences are local to that
+browser; generated timetables and backup data still use the shared demo dataset.
+The settings page also provides a JSON backup download. Account/password changes
+are unavailable for the shared public demo login.
+
 WhatsApp and email screens provide local-only previews in the browser version;
 they do not collect credentials, save recipient details, or send real messages.
 Live messaging is intentionally disabled so the public demo cannot accidentally

@@ -13,8 +13,12 @@
   let state;
   let page = "dashboard";
   let category = "teachers";
-  let replyLanguage = "hi";
-  let lightMode = false;
+  const defaultDays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  const preferenceKey = "timetable-scheduler-preferences";
+  let preferenceStorageError = false;
+  let preferences = loadPreferences();
+  let replyLanguage = preferences.replyLanguage;
+  let lightMode = preferences.theme === "light";
 
   const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
@@ -29,6 +33,42 @@
     ),
   );
 
+  function loadPreferences() {
+    const defaults = {
+      replyLanguage: "hi",
+      theme: "dark",
+      periodsPerDay: 8,
+      weekdays: "",
+    };
+    try {
+      const saved = JSON.parse(localStorage.getItem(preferenceKey) || "{}");
+      return {
+        replyLanguage: ["hi", "en"].includes(saved.replyLanguage) ? saved.replyLanguage : defaults.replyLanguage,
+        theme: ["dark", "light"].includes(saved.theme) ? saved.theme : defaults.theme,
+        periodsPerDay: Number.isInteger(saved.periodsPerDay) && saved.periodsPerDay >= 1 && saved.periodsPerDay <= 12
+          ? saved.periodsPerDay
+          : defaults.periodsPerDay,
+        weekdays: typeof saved.weekdays === "string" && saved.weekdays.length <= 200
+          ? saved.weekdays
+          : defaults.weekdays,
+      };
+    } catch {
+      preferenceStorageError = true;
+      return defaults;
+    }
+  }
+
+  function savePreferences() {
+    try {
+      localStorage.setItem(preferenceKey, JSON.stringify(preferences));
+      preferenceStorageError = false;
+      return true;
+    } catch {
+      preferenceStorageError = true;
+      return false;
+    }
+  }
+
   function syncThemeControls() {
     document.body.classList.toggle("light", lightMode);
     document.querySelectorAll(".theme-toggle").forEach((button) => {
@@ -39,6 +79,8 @@
 
   function toggleTheme() {
     lightMode = !lightMode;
+    preferences.theme = lightMode ? "light" : "dark";
+    savePreferences();
     syncThemeControls();
   }
 
@@ -235,7 +277,9 @@
   }
 
   function generate() {
-    const days = state.days.length ? state.days : ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    const days = preferences.weekdays
+      ? preferences.weekdays.split(",").map((day) => day.trim()).filter(Boolean)
+      : state.days.length ? state.days : defaultDays;
     const timetable = scheduleRows();
     const groups = Object.entries(state.generated_timetable).map(([day, classes]) =>
       `<div class="day-block"><div class="day-title">${esc(day)}</div>${Object.entries(classes).map(([className, periods]) =>
@@ -247,7 +291,7 @@
     return `${heading("Generate Timetable")}<div class="page-content">
       ${card(`<form id="generate-form">
         <div class="config-row"><label class="field-label">Periods/day
-          <input class="input" type="number" name="periods_per_day" min="1" max="12" value="8" required></label>
+          <input class="input" type="number" name="periods_per_day" min="1" max="12" value="${preferences.periodsPerDay}" required></label>
           <label class="field-label">Days (comma separated)
           <input class="input" name="days" value="${esc(days.join(", "))}" required></label></div>
         <button class="btn" type="submit">Generate Now</button><p class="tiny" data-status role="status"></p>
@@ -362,12 +406,45 @@
 
   function settings() {
     const voiceAvailable = Boolean(window.SpeechRecognition || window.webkitSpeechRecognition);
+    const days = preferences.weekdays || (state.days.length ? state.days : defaultDays).join(", ");
     return `${heading("User Settings")}<div class="page-content">
+      ${card(`<h2>Personal preferences</h2>
+        <p class="subtle">These preferences are saved only in this browser and do not change other visitors’ settings.</p>
+        <form id="settings-form" class="settings-form">
+          <div class="settings-grid">
+            <label class="field-label" for="settings-language">Assistant reply language
+              <select class="select" id="settings-language" name="replyLanguage">
+                <option value="hi" ${preferences.replyLanguage === "hi" ? "selected" : ""}>Hindi</option>
+                <option value="en" ${preferences.replyLanguage === "en" ? "selected" : ""}>English</option>
+              </select>
+            </label>
+            <label class="field-label" for="settings-theme">Theme
+              <select class="select" id="settings-theme" name="theme">
+                <option value="dark" ${preferences.theme === "dark" ? "selected" : ""}>Dark</option>
+                <option value="light" ${preferences.theme === "light" ? "selected" : ""}>Light</option>
+              </select>
+            </label>
+            <label class="field-label" for="settings-periods">Default periods per day
+              <input class="input" id="settings-periods" name="periodsPerDay" type="number" min="1" max="12" value="${preferences.periodsPerDay}" required>
+            </label>
+            <label class="field-label" for="settings-days">Default timetable days (comma separated)
+              <input class="input" id="settings-days" name="weekdays" maxlength="200" value="${esc(days)}" required>
+            </label>
+          </div>
+          <div class="settings-actions">
+            <button class="btn" type="submit">Save preferences</button>
+            <p class="tiny" id="settings-status" role="status">${preferenceStorageError ? "Browser storage is unavailable; changes may not be saved." : ""}</p>
+          </div>
+        </form>`, "panel")}
+      ${card(`<h2>Backup and data</h2>
+        <p class="subtle">Download a JSON backup of the shared demo timetable data.</p>
+        <a class="btn settings-backup" href="/api/backup">Download backup</a>
+        <p class="notice">This demo shares its sample dataset between signed-in visitors. Only use fictional information.</p>`, "panel")}
       ${card(`<h2>Hosted demo account</h2>
         <p class="subtle">This browser session is protected by a server-side sign-in. The hosted demo uses its own fictional sample data and does not access the desktop database.</p>
         <p class="subtle">AI provider: ${state.ai_configured ? `${esc(state.ai_provider)} (API key configured on the server)` : "offline timetable helper"}</p>
         <p class="subtle">Speech input: ${voiceAvailable ? "supported by this browser; microphone permission is required" : "not supported by this browser"}</p>
-        <p class="notice">Use only fictional demo information here. This demo shares one dataset between signed-in visitors; do not enter real student or staff data.</p>`, "panel")}
+        <p class="notice">Account and password changes are not available in this shared public demo.</p>`, "panel")}
     </div>`;
   }
 
@@ -430,6 +507,32 @@
             `${channel} preview ready for ${recipient}. Nothing was sent or saved.`;
         });
       }
+    }
+    if (page === "settings") {
+      $("#settings-form").addEventListener("submit", (event) => {
+        event.preventDefault();
+        const form = event.currentTarget;
+        const status = $("#settings-status");
+        const values = Object.fromEntries(new FormData(form));
+        const days = values.weekdays.split(",").map((day) => day.trim()).filter(Boolean);
+        const uniqueDays = new Set(days.map((day) => day.toLocaleLowerCase()));
+        if (!days.length || uniqueDays.size !== days.length) {
+          status.textContent = "Enter at least one day and remove duplicate days.";
+          return;
+        }
+        preferences = {
+          replyLanguage: values.replyLanguage,
+          theme: values.theme,
+          periodsPerDay: Number(values.periodsPerDay),
+          weekdays: days.join(", "),
+        };
+        replyLanguage = preferences.replyLanguage;
+        lightMode = preferences.theme === "light";
+        syncThemeControls();
+        status.textContent = savePreferences()
+          ? "Preferences saved in this browser."
+          : "Could not save preferences. Check this browser’s storage settings.";
+      });
     }
     if (page === "manage") {
       main.querySelectorAll("[data-cat]").forEach((button) =>
@@ -571,6 +674,8 @@
       const micButton = $("#mic-button");
       $("#assistant-language").addEventListener("change", (event) => {
         replyLanguage = event.currentTarget.value;
+        preferences.replyLanguage = replyLanguage;
+        savePreferences();
       });
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (SpeechRecognition) {
