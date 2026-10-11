@@ -64,8 +64,15 @@ browser; generated timetables and backup data still use the shared demo dataset.
 The settings page also provides a JSON backup download. Account/password changes
 are unavailable for the shared public demo login.
 
-WhatsApp and email screens provide local-only previews in the browser version;
-they do not collect credentials, save recipient details, or send real messages.
-Live messaging is intentionally disabled so the public demo cannot accidentally
-contact real recipients or incur charges. Microphone input depends on browser
-support and permission.
+The browser version includes PDF, Excel, and JSON data exports. WhatsApp and
+email work as previews by default. Live sending is opt-in: set
+`TIMETABLE_ENABLE_LIVE_MESSAGING=1`, configure Twilio with
+`TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, and `TWILIO_WHATSAPP_FROM`, and set
+`TIMETABLE_ALLOWED_WHATSAPP_RECIPIENTS` to comma-separated E.164 numbers.
+For email, set `TIMETABLE_SMTP_HOST`, `TIMETABLE_SMTP_PORT`,
+`TIMETABLE_SMTP_USER`, `TIMETABLE_SMTP_PASSWORD`, and
+`TIMETABLE_ALLOWED_EMAIL_RECIPIENTS` to comma-separated addresses. Configure
+these as private server environment secrets; the UI never handles provider
+credentials. Only allowlisted recipients can receive messages, and sends are
+rate-limited. Messaging may incur charges and contact real recipients.
+Microphone input depends on browser support and permission.

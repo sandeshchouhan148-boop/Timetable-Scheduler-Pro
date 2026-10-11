@@ -13,6 +13,7 @@
   let state;
   let page = "dashboard";
   let category = "teachers";
+  let expertiseTeacher = "";
   const defaultDays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
   const preferenceKey = "timetable-scheduler-preferences";
   let preferenceStorageError = false;
@@ -226,12 +227,15 @@
   function expertiseForm() {
     const teacher = state.teachers[0];
     if (!teacher) return `<p class="subtle">Add a teacher before setting subject expertise.</p>`;
-    const selected = state.teacher_expertise[teacher.name] || [];
+    const selectedTeacher = state.teachers.some((item) => item.name === expertiseTeacher)
+      ? expertiseTeacher
+      : teacher.name;
+    const selected = state.teacher_expertise[selectedTeacher] || [];
     return `<form id="expertise-form" data-array="subjects">
       <h2>Set Teacher Expertise</h2>
       <label class="field-label" for="expert-teacher">Teacher</label>
       <select class="select" name="teacher" id="expert-teacher">
-        ${state.teachers.map((item) => `<option value="${esc(item.name)}">${esc(item.name)}</option>`).join("")}
+        ${state.teachers.map((item) => `<option value="${esc(item.name)}" ${item.name === selectedTeacher ? "selected" : ""}>${esc(item.name)}</option>`).join("")}
       </select>
       <div class="expertise">${state.subjects.map((subject) => `<label class="field-label">
         <input type="checkbox" name="subjects" value="${esc(subject)}" ${selected.includes(subject) ? "checked" : ""}> ${esc(subject)}
@@ -261,9 +265,10 @@
         ${card(`<h2>Add ${esc(selectedType[1])}</h2>
           <form id="asset-form"><input class="input" name="name" maxlength="120" required placeholder="Enter name..." aria-label="New ${esc(selectedType[1])} name">
           <button class="btn green" type="submit">Add Item</button><p class="tiny" data-status role="status"></p></form>
+          <label class="field-label" for="asset-search">Search</label>
+          <input class="input" id="asset-search" placeholder="Search this list..." aria-label="Search assets">
           ${category === "teachers" ? expertiseForm() : ""}`, "panel")}
         ${card(`<h2>All ${esc(selectedType[1])}</h2>
-          <input class="input" id="asset-search" placeholder="Search this list..." aria-label="Search assets">
           <div id="asset-list">${rows}</div>`, "panel")}
       </div></div>`;
   }
@@ -288,6 +293,12 @@
         ).join("")}`, "class-card"),
       ).join("")}</div>`,
     ).join("");
+    const generatedControls = timetable.length
+      ? `<div class="export-actions">
+          <a class="btn" href="/api/export.pdf">Export PDF</a>
+          <a class="btn green" href="/api/export.xlsx">Export Excel</a>
+        </div>`
+      : "";
     return `${heading("Generate Timetable")}<div class="page-content">
       ${card(`<form id="generate-form">
         <div class="config-row"><label class="field-label">Periods/day
@@ -297,6 +308,7 @@
         <button class="btn" type="submit">Generate Now</button><p class="tiny" data-status role="status"></p>
       </form>`, "panel")}
       <p class="subtle">Loaded ${timetable.length} timetable entries from the app database.</p>
+      ${generatedControls}
       ${groups ? card(`<h2>Current schedule</h2>${groups}`, "panel") : card(`<div class="empty">No timetable has been generated yet.</div>`, "panel")}
     </div>`;
   }
@@ -371,36 +383,39 @@
   }
 
   function whatsapp() {
+    const messaging = state.messaging || {};
+    const whatsappReady = messaging.whatsapp_ready;
+    const emailReady = messaging.email_ready;
     return `${heading("WhatsApp Hub")}<div class="page-content messaging-page">
       ${card(`<h2>Twilio WhatsApp</h2>
-        <p class="notice">Public demo · live messaging is off. Twilio credentials are never collected here, and no real WhatsApp or email will be sent.</p>
-        <p class="subtle">Use the forms below to preview the experience. Connecting a live sender requires a private, secured server setup.</p>`, "panel")}
+      <p class="notice">${messaging.whatsapp_ready || messaging.email_ready ? "Server-side live messaging is configured. Sending contacts real recipients and may incur provider charges." : "Public demo · live messaging is off. Provider credentials are stored only as server environment secrets."}</p>
+      <p class="subtle">For security and billing protection, only server-authorized recipients can receive live messages. Never enter provider credentials in this page.</p>`, "panel")}
       ${card(`<h2>Send WhatsApp Message</h2>
-        <form id="whatsapp-form">
+        <form id="whatsapp-form" data-channel="whatsapp">
           <label class="field-label" for="whatsapp-teacher">Recipient Teacher</label>
           <select class="select" id="whatsapp-teacher" name="teacher">
-            ${state.teachers.map((teacher) => `<option value="${esc(teacher.name)}">${esc(teacher.name)}</option>`).join("")}
+          ${state.teachers.map((teacher) => `<option value="${esc(teacher.name)}" data-phone="${esc(teacher.phone || "")}">${esc(teacher.name)}</option>`).join("")}
           </select>
           <label class="field-label" for="whatsapp-phone">Phone</label>
           <input class="input" id="whatsapp-phone" name="phone" type="tel" maxlength="40" placeholder="+91 98765 43210" required>
           <label class="field-label" for="whatsapp-message">Message</label>
           <textarea class="textarea messaging-textarea" id="whatsapp-message" name="message" maxlength="2000" required>Hello! Your timetable has been updated. Please check the Scheduler Pro portal.</textarea>
-          <button class="btn wa-submit" type="submit">Preview WhatsApp</button>
+          <button class="btn wa-submit" type="submit">${whatsappReady ? "Send WhatsApp (Twilio)" : "Preview WhatsApp"}</button>
           <p class="tiny" data-status role="status"></p>
         </form>
-        <p class="messaging-note">Preview only: no message is sent and no details are saved.</p>`, "panel")}
+        <p class="messaging-note">${whatsappReady ? "Live sending is allowed only to recipient numbers authorized on the server." : "Preview only: no message is sent and no details are saved."}</p>`, "panel")}
       ${card(`<h2>Send Email</h2>
-        <form id="email-preview-form">
+        <form id="email-preview-form" data-channel="email">
           <label class="field-label" for="email-recipient">Recipient Email</label>
           <input class="input" id="email-recipient" name="email" type="email" maxlength="254" placeholder="teacher@example.com" required>
           <label class="field-label" for="email-subject">Subject</label>
           <input class="input" id="email-subject" name="subject" maxlength="200" value="Timetable update" required>
           <label class="field-label" for="email-message">Message</label>
           <textarea class="textarea messaging-textarea" id="email-message" name="message" maxlength="2000" required>Hello! Your timetable has been updated. Please check the Scheduler Pro portal.</textarea>
-          <button class="btn email-submit" type="submit">Preview Email</button>
+          <button class="btn email-submit" type="submit">${emailReady ? "Send Email" : "Preview Email"}</button>
           <p class="tiny" data-status role="status"></p>
         </form>
-        <p class="messaging-note">Preview only: no email is sent and no details are saved.</p>`, "panel")}
+        <p class="messaging-note">${emailReady ? "Live sending is allowed only to recipient addresses authorized on the server." : "Preview only: no email is sent and no details are saved."}</p>`, "panel")}
     </div>`;
   }
 
@@ -495,16 +510,23 @@
       button.addEventListener("click", () => render(button.dataset.go)),
     );
     if (page === "whatsapp") {
+      const teacherSelect = $("#whatsapp-teacher");
+      const fillTeacherDetails = () => {
+        const teacher = state.teachers.find((item) => item.name === teacherSelect.value);
+        const phone = $("#whatsapp-phone");
+        if (teacher?.phone) phone.value = teacher.phone.startsWith("+")
+          ? teacher.phone
+          : `+91${teacher.phone.replace(/^0+/, "")}`;
+      };
+      teacherSelect.addEventListener("change", fillTeacherDetails);
+      fillTeacherDetails();
       for (const [formId, recipientId, channel] of [
         ["whatsapp-form", "whatsapp-phone", "WhatsApp"],
         ["email-preview-form", "email-recipient", "email"],
       ]) {
         $(`#${formId}`).addEventListener("submit", (event) => {
           event.preventDefault();
-          const form = event.currentTarget;
-          const recipient = form.querySelector(`#${recipientId}`).value.trim();
-          form.querySelector("[data-status]").textContent =
-            `${channel} preview ready for ${recipient}. Nothing was sent or saved.`;
+          submitMessagingForm(event.currentTarget, recipientId, channel);
         });
       }
     }
@@ -516,8 +538,8 @@
         const values = Object.fromEntries(new FormData(form));
         const days = values.weekdays.split(",").map((day) => day.trim()).filter(Boolean);
         const uniqueDays = new Set(days.map((day) => day.toLocaleLowerCase()));
-        if (!days.length || uniqueDays.size !== days.length) {
-          status.textContent = "Enter at least one day and remove duplicate days.";
+        if (!days.length || days.length > 7 || days.some((day) => day.length > 30) || uniqueDays.size !== days.length) {
+          status.textContent = "Enter 1–7 unique days, each no longer than 30 characters.";
           return;
         }
         preferences = {
@@ -568,6 +590,7 @@
       if ($("#expertise-form")) {
         const form = $("#expertise-form");
         $("#expert-teacher").addEventListener("change", () => {
+          expertiseTeacher = $("#expert-teacher").value;
           const selected = state.teacher_expertise[$("#expert-teacher").value] || [];
           form.querySelectorAll('input[name="subjects"]').forEach((input) => {
             input.checked = selected.includes(input.value);
@@ -588,12 +611,20 @@
         const values = Object.fromEntries(new FormData(form));
         values.periods_per_day = Number(values.periods_per_day);
         values.days = values.days.split(",").map((day) => day.trim()).filter(Boolean);
+        const uniqueDays = new Set(values.days.map((day) => day.toLocaleLowerCase()));
+        if (!values.days.length || values.days.length > 7 || values.days.some((day) => day.length > 30) || uniqueDays.size !== values.days.length) {
+          status.textContent = "Enter 1–7 unique days, each no longer than 30 characters.";
+          return;
+        }
         submit.disabled = true;
         status.textContent = "Generating and saving schedule…";
         try {
           const result = await api("/api/timetable/generate", {
             method: "POST", body: JSON.stringify(values),
           });
+          preferences.periodsPerDay = values.periods_per_day;
+          preferences.weekdays = values.days.join(", ");
+          savePreferences();
           await refresh();
           if ($("#generate-form")) $("#generate-form [data-status]").textContent = `Saved ${result.entries} entries for ${result.days} days.`;
         } catch (error) {
@@ -751,6 +782,35 @@
           }
         });
       }
+    }
+  }
+
+  async function submitMessagingForm(form, recipientId, channel) {
+    const status = form.querySelector("[data-status]");
+    const submit = form.querySelector('[type="submit"]');
+    const recipient = form.querySelector(`#${recipientId}`).value.trim();
+    const values = Object.fromEntries(new FormData(form));
+    const liveReady = channel === "WhatsApp"
+      ? state.messaging?.whatsapp_ready
+      : state.messaging?.email_ready;
+    if (!liveReady) {
+      status.textContent = `${channel} preview ready for ${recipient}. Nothing was sent or saved.`;
+      return;
+    }
+    submit.disabled = true;
+    status.textContent = `Sending ${channel} message…`;
+    try {
+      const result = await api(`/api/messaging/${channel === "WhatsApp" ? "whatsapp" : "email"}`, {
+        method: "POST",
+        body: JSON.stringify(values),
+      });
+      status.textContent = channel === "WhatsApp" && result.message_id
+        ? `WhatsApp sent successfully (message ID ${result.message_id}).`
+        : `${channel} sent successfully to ${recipient}.`;
+    } catch (error) {
+      status.textContent = error.message;
+    } finally {
+      if (submit.isConnected) submit.disabled = false;
     }
   }
 

@@ -2,20 +2,33 @@
 
 from __future__ import annotations
 
+import base64
 import hmac
 import json
 import os
+import smtplib
 import sqlite3
+import ssl
 import sys
 import time
+import zipfile
 from contextlib import closing
+from email.message import EmailMessage
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from http.cookies import SimpleCookie
+from io import BytesIO
 from pathlib import Path
-from urllib.parse import unquote, urlparse
+from urllib.error import HTTPError, URLError
+from urllib.parse import quote, unquote, urlencode, urlparse
+from urllib.request import Request, urlopen
+from xml.etree import ElementTree
 
-from ai_service import AIService, generate_clash_free_timetable, is_timetable_generation_request
+from ai_service import (
+    AIService,
+    generate_clash_free_timetable,
+    is_timetable_generation_request,
+)
 
 
 ROOT = Path(__file__).resolve().parent
@@ -31,6 +44,30 @@ SESSION_SECRET = os.environ.get("TIMETABLE_SESSION_SECRET", "")
 COOKIE_SECURE = os.environ.get("TIMETABLE_COOKIE_SECURE", "1").strip() != "0"
 SESSION_LIFETIME_SECONDS = 12 * 60 * 60
 LOGIN_ATTEMPTS: dict[str, list[float]] = {}
+LIVE_MESSAGING_ENABLED = os.environ.get("TIMETABLE_ENABLE_LIVE_MESSAGING", "").strip().casefold() in {
+    "1",
+    "true",
+    "yes",
+}
+TWILIO_ACCOUNT_SID = os.environ.get("TWILIO_ACCOUNT_SID", "").strip()
+TWILIO_AUTH_TOKEN = os.environ.get("TWILIO_AUTH_TOKEN", "").strip()
+TWILIO_WHATSAPP_FROM = os.environ.get("TWILIO_WHATSAPP_FROM", "").strip()
+ALLOWED_WHATSAPP_RECIPIENTS = {
+    number.strip()
+    for number in os.environ.get("TIMETABLE_ALLOWED_WHATSAPP_RECIPIENTS", "").split(",")
+    if number.strip()
+}
+SMTP_HOST = os.environ.get("TIMETABLE_SMTP_HOST", "").strip()
+SMTP_PORT = int(os.environ.get("TIMETABLE_SMTP_PORT", "587"))
+SMTP_USER = os.environ.get("TIMETABLE_SMTP_USER", "").strip()
+SMTP_PASSWORD = os.environ.get("TIMETABLE_SMTP_PASSWORD", "")
+ALLOWED_EMAIL_RECIPIENTS = {
+    address.strip().casefold()
+    for address in os.environ.get("TIMETABLE_ALLOWED_EMAIL_RECIPIENTS", "").split(",")
+    if address.strip()
+}
+MESSAGE_SEND_ATTEMPTS: dict[str, list[float]] = {}
+EXPORT_RATE_LIMIT: dict[str, list[float]] = {}
 ASSET_TABLES = {
     "teachers": "teachers",
     "subjects": "subjects",
@@ -258,7 +295,195 @@ def fetch_state(connection: sqlite3.Connection) -> dict:
         "role": "admin",
         "ai_provider": AI.provider,
         "ai_configured": AI.configured,
+        "messaging": {
+            "live_enabled": LIVE_MESSAGING_ENABLED,
+            "whatsapp_ready": bool(
+                LIVE_MESSAGING_ENABLED
+                and TWILIO_ACCOUNT_SID
+                and TWILIO_AUTH_TOKEN
+                and TWILIO_WHATSAPP_FROM
+                and ALLOWED_WHATSAPP_RECIPIENTS
+            ),
+            "email_ready": bool(
+                LIVE_MESSAGING_ENABLED
+                and SMTP_HOST
+                and SMTP_USER
+                and SMTP_PASSWORD
+                and ALLOWED_EMAIL_RECIPIENTS
+            ),
+        },
     }
+
+
+def excel_workbook(state: dict) -> bytes:
+    namespace = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+    relationships = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+    ElementTree.register_namespace("", namespace)
+    ElementTree.register_namespace("r", relationships)
+    sheet = ElementTree.Element(f"{{{namespace}}}worksheet")
+    sheet_data = ElementTree.SubElement(sheet, f"{{{namespace}}}sheetData")
+    headers = ("Day", "Class", "Period", "Subject", "Teacher", "Room")
+    rows = [headers]
+    for day, classes in state["generated_timetable"].items():
+        for class_name, periods in classes.items():
+            for period, item in periods.items():
+                rows.append(
+                    (day, class_name, period, item["subject"], item["teacher"], item["room"])
+                )
+
+    for row_number, values in enumerate(rows, start=1):
+        row = ElementTree.SubElement(
+            sheet_data, f"{{{namespace}}}row", {"r": str(row_number)}
+        )
+        for column_number, value in enumerate(values):
+            column_name = chr(ord("A") + column_number)
+            cell = ElementTree.SubElement(
+                row,
+                f"{{{namespace}}}c",
+                {"r": f"{column_name}{row_number}"},
+            )
+            if row_number > 1 and column_number == 2:
+                cell.set("t", "n")
+                ElementTree.SubElement(cell, f"{{{namespace}}}v").text = str(value)
+            else:
+                cell.set("t", "inlineStr")
+                inline = ElementTree.SubElement(cell, f"{{{namespace}}}is")
+                ElementTree.SubElement(inline, f"{{{namespace}}}t").text = str(value)
+
+    workbook = ElementTree.Element(f"{{{namespace}}}workbook")
+    sheets = ElementTree.SubElement(workbook, f"{{{namespace}}}sheets")
+    ElementTree.SubElement(
+        sheets,
+        f"{{{namespace}}}sheet",
+        {"name": "Timetable", "sheetId": "1", f"{{{relationships}}}id": "rId1"},
+    )
+    content_types = ElementTree.Element(
+        "Types",
+        xmlns="http://schemas.openxmlformats.org/package/2006/content-types",
+    )
+    ElementTree.SubElement(
+        content_types,
+        "Default",
+        {"Extension": "rels", "ContentType": "application/vnd.openxmlformats-package.relationships+xml"},
+    )
+    ElementTree.SubElement(
+        content_types,
+        "Default",
+        {"Extension": "xml", "ContentType": "application/xml"},
+    )
+    ElementTree.SubElement(
+        content_types,
+        "Override",
+        {"PartName": "/xl/workbook.xml", "ContentType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"},
+    )
+    ElementTree.SubElement(
+        content_types,
+        "Override",
+        {"PartName": "/xl/worksheets/sheet1.xml", "ContentType": "application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"},
+    )
+    package_relationships = ElementTree.Element(
+        "Relationships",
+        xmlns="http://schemas.openxmlformats.org/package/2006/relationships",
+    )
+    ElementTree.SubElement(
+        package_relationships,
+        "Relationship",
+        {
+            "Id": "rId1",
+            "Type": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument",
+            "Target": "xl/workbook.xml",
+        },
+    )
+    workbook_relationships = ElementTree.Element(
+        "Relationships",
+        xmlns="http://schemas.openxmlformats.org/package/2006/relationships",
+    )
+    ElementTree.SubElement(
+        workbook_relationships,
+        "Relationship",
+        {
+            "Id": "rId1",
+            "Type": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet",
+            "Target": "worksheets/sheet1.xml",
+        },
+    )
+
+    output = BytesIO()
+    with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("[Content_Types].xml", ElementTree.tostring(content_types, encoding="utf-8", xml_declaration=True))
+        archive.writestr("_rels/.rels", ElementTree.tostring(package_relationships, encoding="utf-8", xml_declaration=True))
+        archive.writestr("xl/workbook.xml", ElementTree.tostring(workbook, encoding="utf-8", xml_declaration=True))
+        archive.writestr("xl/_rels/workbook.xml.rels", ElementTree.tostring(workbook_relationships, encoding="utf-8", xml_declaration=True))
+        archive.writestr("xl/worksheets/sheet1.xml", ElementTree.tostring(sheet, encoding="utf-8", xml_declaration=True))
+    return output.getvalue()
+
+
+def timetable_pdf(timetable: dict) -> bytes:
+    lines = ["Timetable Scheduler Pro"]
+    for day, classes in timetable.items():
+        lines.append("")
+        lines.append(day)
+        for class_name, periods in classes.items():
+            lines.append(f"Class: {class_name}")
+            for period, item in periods.items():
+                lines.append(
+                    f"P{period}: {item['subject']} | {item['teacher']} | {item['room']}"
+                )
+
+    wrapped_lines = []
+    for line in lines:
+        while len(line) > 88:
+            split_at = line.rfind(" ", 0, 88)
+            if split_at < 1:
+                split_at = 88
+            wrapped_lines.append(line[:split_at])
+            line = line[split_at:].lstrip()
+        wrapped_lines.append(line)
+    chunks = [wrapped_lines[index:index + 48] for index in range(0, len(wrapped_lines), 48)] or [["No timetable entries."]]
+
+    objects: list[bytes] = []
+    page_ids = []
+    for page_index, chunk in enumerate(chunks):
+        page_id = 4 + page_index * 2
+        content_id = page_id + 1
+        page_ids.append(page_id)
+        commands = ["BT", "/F1 10 Tf", "50 790 Td", "14 TL"]
+        for index, line in enumerate(chunk):
+            if index:
+                commands.append("T*")
+            safe_line = line.encode("cp1252", "replace").decode("cp1252")
+            escaped = safe_line.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+            commands.append(f"({escaped}) Tj")
+        commands.append("ET")
+        content = "\n".join(commands).encode("cp1252", "replace")
+        objects.extend(
+            [
+                f"{page_id} 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents {content_id} 0 R >>\nendobj\n".encode("ascii"),
+                f"{content_id} 0 obj\n<< /Length {len(content)} >>\nstream\n".encode("ascii")
+                + content
+                + b"\nendstream\nendobj\n",
+            ]
+        )
+    pages = " ".join(f"{page_id} 0 R" for page_id in page_ids)
+    base_objects = [
+        b"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n",
+        f"2 0 obj\n<< /Type /Pages /Kids [{pages}] /Count {len(page_ids)} >>\nendobj\n".encode("ascii"),
+        b"3 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>\nendobj\n",
+    ]
+    output = bytearray(b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n")
+    offsets = [0]
+    for entry in base_objects + objects:
+        offsets.append(len(output))
+        output.extend(entry)
+    xref_offset = len(output)
+    output.extend(f"xref\n0 {len(offsets)}\n".encode("ascii"))
+    output.extend(b"0000000000 65535 f \n")
+    for offset in offsets[1:]:
+        output.extend(f"{offset:010d} 00000 n \n".encode("ascii"))
+    output.extend(
+        f"trailer\n<< /Size {len(offsets)} /Root 1 0 R >>\nstartxref\n{xref_offset}\n%%EOF\n".encode("ascii")
+    )
+    return bytes(output)
 
 
 class PreviewHandler(SimpleHTTPRequestHandler):
@@ -388,7 +613,32 @@ class PreviewHandler(SimpleHTTPRequestHandler):
                     HTTPStatus.INTERNAL_SERVER_ERROR,
                 )
             return
+        if path == "/api/export.pdf":
+            if not self.check_export_rate_limit():
+                return
+            try:
+                with closing(open_database()) as connection:
+                    timetable = fetch_state(connection)["generated_timetable"]
+                pdf = timetable_pdf(timetable)
+                self.send_response(HTTPStatus.OK)
+                self.send_header("Content-Type", "application/pdf")
+                self.send_header(
+                    "Content-Disposition",
+                    'attachment; filename="timetable-scheduler.pdf"',
+                )
+                self.send_header("Content-Length", str(len(pdf)))
+                self.end_headers()
+                self.wfile.write(pdf)
+            except (sqlite3.Error, OSError) as exc:
+                print(f"Could not export timetable PDF: {exc}", file=sys.stderr)
+                self.respond_json(
+                    {"error": "Could not export the timetable PDF."},
+                    HTTPStatus.INTERNAL_SERVER_ERROR,
+                )
+            return
         if path == "/api/backup":
+            if not self.check_export_rate_limit():
+                return
             try:
                 with closing(open_database()) as connection:
                     backup = json.dumps(
@@ -410,6 +660,31 @@ class PreviewHandler(SimpleHTTPRequestHandler):
                     HTTPStatus.INTERNAL_SERVER_ERROR,
                 )
             return
+        if path == "/api/export.xlsx":
+            if not self.check_export_rate_limit():
+                return
+            try:
+                with closing(open_database()) as connection:
+                    workbook = excel_workbook(fetch_state(connection))
+                self.send_response(HTTPStatus.OK)
+                self.send_header(
+                    "Content-Type",
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+                self.send_header(
+                    "Content-Disposition",
+                    'attachment; filename="timetable-scheduler.xlsx"',
+                )
+                self.send_header("Content-Length", str(len(workbook)))
+                self.end_headers()
+                self.wfile.write(workbook)
+            except (sqlite3.Error, ElementTree.ParseError, OSError) as exc:
+                print(f"Could not export timetable Excel workbook: {exc}", file=sys.stderr)
+                self.respond_json(
+                    {"error": "Could not export the timetable workbook."},
+                    HTTPStatus.INTERNAL_SERVER_ERROR,
+                )
+            return
         if path.startswith("/api/"):
             self.respond_json({"error": "API route not found."}, HTTPStatus.NOT_FOUND)
             return
@@ -421,6 +696,18 @@ class PreviewHandler(SimpleHTTPRequestHandler):
         path = urlparse(self.path).path
         if path == "/api/logout":
             self.respond_json({"ok": True}, cookie=self.clear_session_cookie())
+            return
+        if path in {"/api/messaging/whatsapp", "/api/messaging/email"}:
+            try:
+                if not self.require_authenticated():
+                    return
+                data = self.read_json()
+                if path.endswith("/whatsapp"):
+                    self.send_whatsapp_message(data)
+                else:
+                    self.send_email_message(data)
+            except ValueError as exc:
+                self.respond_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
             return
         try:
             data = self.read_json()
@@ -491,6 +778,165 @@ class PreviewHandler(SimpleHTTPRequestHandler):
             {"ok": True, "username": ADMIN_USERNAME},
             cookie=self.make_session_cookie(),
         )
+
+    def check_message_rate_limit(self) -> bool:
+        now = time.time()
+        address = self.client_address[0]
+        attempts = [
+            timestamp
+            for timestamp in MESSAGE_SEND_ATTEMPTS.get(address, [])
+            if now - timestamp < 300
+        ]
+        if len(attempts) >= 5:
+            MESSAGE_SEND_ATTEMPTS[address] = attempts
+            self.respond_json(
+                {"error": "Too many message requests. Wait five minutes and try again."},
+                HTTPStatus.TOO_MANY_REQUESTS,
+            )
+            return False
+        attempts.append(now)
+        MESSAGE_SEND_ATTEMPTS[address] = attempts
+        return True
+
+    def check_export_rate_limit(self) -> bool:
+        now = time.time()
+        address = self.client_address[0]
+        attempts = [
+            timestamp
+            for timestamp in EXPORT_RATE_LIMIT.get(address, [])
+            if now - timestamp < 60
+        ]
+        if len(attempts) >= 10:
+            EXPORT_RATE_LIMIT[address] = attempts
+            self.respond_json(
+                {"error": "Too many exports. Wait one minute and try again."},
+                HTTPStatus.TOO_MANY_REQUESTS,
+            )
+            return False
+        attempts.append(now)
+        EXPORT_RATE_LIMIT[address] = attempts
+        return True
+
+    def send_whatsapp_message(self, data: dict) -> None:
+        if not LIVE_MESSAGING_ENABLED:
+            self.respond_json(
+                {"error": "Live WhatsApp sending is disabled. This demo only supports previews."},
+                HTTPStatus.FORBIDDEN,
+            )
+            return
+        if not self.check_message_rate_limit():
+            return
+        recipient = data.get("phone")
+        message = data.get("message")
+        if (
+            not isinstance(recipient, str)
+            or recipient not in ALLOWED_WHATSAPP_RECIPIENTS
+            or not isinstance(message, str)
+            or not message.strip()
+            or len(message) > 2000
+        ):
+            self.respond_json(
+                {"error": "Use an authorized recipient and a message up to 2000 characters."},
+                HTTPStatus.BAD_REQUEST,
+            )
+            return
+        if not TWILIO_ACCOUNT_SID or not TWILIO_AUTH_TOKEN or not TWILIO_WHATSAPP_FROM:
+            self.respond_json(
+                {"error": "WhatsApp sending is not configured on the server."},
+                HTTPStatus.SERVICE_UNAVAILABLE,
+            )
+            return
+        form = urlencode(
+            {
+                "From": f"whatsapp:{TWILIO_WHATSAPP_FROM}",
+                "To": f"whatsapp:{recipient}",
+                "Body": message.strip(),
+            }
+        ).encode("utf-8")
+        credentials = base64.b64encode(
+            f"{TWILIO_ACCOUNT_SID}:{TWILIO_AUTH_TOKEN}".encode("utf-8")
+        ).decode("ascii")
+        request = Request(
+            f"https://api.twilio.com/2010-04-01/Accounts/{quote(TWILIO_ACCOUNT_SID, safe='')}/Messages.json",
+            data=form,
+            headers={
+                "Authorization": f"Basic {credentials}",
+                "Content-Type": "application/x-www-form-urlencoded",
+            },
+            method="POST",
+        )
+        try:
+            with urlopen(request, timeout=15) as response:
+                result = json.load(response)
+        except HTTPError as exc:
+            detail = exc.read(1024).decode("utf-8", "replace")
+            print(f"Twilio request failed ({exc.code}): {detail}", file=sys.stderr)
+            self.respond_json(
+                {"error": "WhatsApp provider rejected the request. Check server credentials and recipient authorization."},
+                HTTPStatus.BAD_GATEWAY,
+            )
+            return
+        except (URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
+            print(f"Could not send WhatsApp message: {exc}", file=sys.stderr)
+            self.respond_json(
+                {"error": "Could not reach the WhatsApp provider."},
+                HTTPStatus.BAD_GATEWAY,
+            )
+            return
+        self.respond_json({"ok": True, "message_id": result.get("sid", "")})
+
+    def send_email_message(self, data: dict) -> None:
+        if not LIVE_MESSAGING_ENABLED:
+            self.respond_json(
+                {"error": "Live email sending is disabled. This demo only supports previews."},
+                HTTPStatus.FORBIDDEN,
+            )
+            return
+        if not self.check_message_rate_limit():
+            return
+        recipient = data.get("email")
+        subject = data.get("subject")
+        message_text = data.get("message")
+        if (
+            not isinstance(recipient, str)
+            or recipient.casefold() not in ALLOWED_EMAIL_RECIPIENTS
+            or not isinstance(subject, str)
+            or not subject.strip()
+            or len(subject) > 200
+            or any(character in subject for character in "\r\n")
+            or not isinstance(message_text, str)
+            or not message_text.strip()
+            or len(message_text) > 2000
+        ):
+            self.respond_json(
+                {"error": "Use an authorized email recipient, valid subject, and message up to 2000 characters."},
+                HTTPStatus.BAD_REQUEST,
+            )
+            return
+        if not SMTP_HOST or not SMTP_USER or not SMTP_PASSWORD:
+            self.respond_json(
+                {"error": "Email sending is not configured on the server."},
+                HTTPStatus.SERVICE_UNAVAILABLE,
+            )
+            return
+        email = EmailMessage()
+        email["From"] = SMTP_USER
+        email["To"] = recipient
+        email["Subject"] = subject.strip()
+        email.set_content(message_text.strip())
+        try:
+            with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=15) as client:
+                client.starttls(context=ssl.create_default_context())
+                client.login(SMTP_USER, SMTP_PASSWORD)
+                client.send_message(email)
+        except (OSError, smtplib.SMTPException, ssl.SSLError) as exc:
+            print(f"Could not send email: {exc}", file=sys.stderr)
+            self.respond_json(
+                {"error": "Could not send email. Check server settings and provider status."},
+                HTTPStatus.BAD_GATEWAY,
+            )
+            return
+        self.respond_json({"ok": True})
 
     def handle_post(self, connection: sqlite3.Connection, path: str, data: dict) -> dict:
         if path == "/api/assets":
